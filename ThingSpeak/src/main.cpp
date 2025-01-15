@@ -1,5 +1,6 @@
 #include <Adafruit_MAX31865.h>
 #include <WiFiS3.h>
+#include <ThingSpeak.h>
 
 void printWifiStatus();
 
@@ -14,6 +15,7 @@ Adafruit_MAX31865 thermo = Adafruit_MAX31865(10);
 char ssid[] = "AVC";
 char pass[] = "HoggleMan69";
 int status = WL_IDLE_STATUS;
+WiFiClient client;
 
 
 void setup() {
@@ -37,6 +39,9 @@ void setup() {
     delay(10000);
   }
   printWifiStatus();
+
+  ThingSpeak.begin(client);
+  
   thermo.begin(MAX31865_3WIRE);  // set to 2WIRE or 4WIRE as necessary
 }
 
@@ -51,10 +56,14 @@ void loop() {
   Serial.print("Resistance = "); Serial.println(RREF*ratio,8);
   Serial.print("Temperature = "); Serial.println(thermo.temperature(RNOMINAL, RREF));
 
+  float temp = thermo.temperature(RNOMINAL, RREF);
+  int success = ThingSpeak.writeField(2810004 ,1, temp, "YWD5EAS53P91TXJI");
+  Serial.print("Sucess = "); Serial.println(success);
+  if (success == 200) {
+    Serial.println("Successfully written to ThingSpeak.");
+  }
 
-
-  Serial.println();
-  delay(5000);
+  delay(15000);
 }
 
 void printWifiStatus() {
