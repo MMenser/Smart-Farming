@@ -21,7 +21,7 @@ Adafruit_MAX31865 sensor5 = Adafruit_MAX31865(2, 11, 12, 13);
 char ssid[] = "AVC";
 char pass[] = "HoggleMan69";
 int status = WL_IDLE_STATUS;
-WiFiClient client;
+WiFiServer server(80);
 
 
 void setup() {
@@ -44,9 +44,10 @@ void setup() {
     // wait 10 seconds for connection:
     delay(10000);
   }
+  server.begin();
   printWifiStatus();
 
-  ThingSpeak.begin(client);
+  //ThingSpeak.begin(client);
   
   sensor1.begin(MAX31865_3WIRE);  // set to 2WIRE or 4WIRE as necessary
   sensor2.begin(MAX31865_3WIRE);
@@ -55,46 +56,73 @@ void setup() {
   sensor5.begin(MAX31865_3WIRE);
 }
 
+unsigned long lastUpdate = 0;  // Stores last sensor update time
+const unsigned long updateInterval = 15000;  // 15 seconds
+
+float temp1, temp2, temp3, temp4, temp5;  // Store sensor values
 
 void loop() {
-  // uint16_t rtd = thermo.readRTD();
+  unsigned long currentMillis = millis();
 
-  // Serial.print("RTD value: "); Serial.println(rtd);
-  // float ratio = rtd;
-  // ratio /= 32768;
-  // Serial.print("Ratio = "); Serial.println(ratio,8);
-  // Serial.print("Resistance = "); Serial.println(RREF*ratio,8);
-  // double celsius = thermo.temperature(RNOMINAL, RREF);
-  // double farenheit = celsius * 1.8 + 32.0;
-  // Serial.print("Temperature = "); Serial.println(farenheit);
+  // Update sensor data every 15 seconds
+  if (currentMillis - lastUpdate >= updateInterval) {
+    lastUpdate = currentMillis;  // Reset timer
 
-  // float temp = thermo.temperature(RNOMINAL, RREF);
-  // int success = ThingSpeak.writeField(2810004 ,1, temp, "YWD5EAS53P91TXJI");
-  // Serial.print("Sucess = "); Serial.println(success);
-  // if (success == 200) {
-  //   Serial.println("Successfully written to ThingSpeak.");
-  // }
+    temp1 = sensor1.temperature(RNOMINAL, RREF) * 1.8 + 32;
+    temp2 = sensor2.temperature(RNOMINAL, RREF) * 1.8 + 32;
+    temp3 = sensor3.temperature(RNOMINAL, RREF) * 1.8 + 32;
+    temp4 = sensor4.temperature(RNOMINAL, RREF) * 1.8 + 32;
+    temp5 = sensor5.temperature(RNOMINAL, RREF) * 1.8 + 32;    
 
-  // delay(5000);
-  float temp1 = sensor1.temperature(RNOMINAL, RREF);
-  float temp2 = sensor2.temperature(RNOMINAL, RREF);
-  float temp3 = sensor3.temperature(RNOMINAL, RREF);
-  float temp4 = sensor4.temperature(RNOMINAL, RREF);
-  float temp5 = sensor5.temperature(RNOMINAL, RREF);
+    Serial.println("Updated sensor readings:");
+    Serial.print("Sensor 1: "); Serial.println(temp1);
+    Serial.print("Sensor 2: "); Serial.println(temp2);
+    Serial.print("Sensor 3: "); Serial.println(temp3);
+    Serial.print("Sensor 4: "); Serial.println(temp4);
+    Serial.print("Sensor 5: "); Serial.println(temp5);
+    Serial.println("----------------------");
+  }
 
-  Serial.print("Sensor 1 Temp: "); Serial.print(temp1); Serial.println(" °C");
-  Serial.print("Sensor 2 Temp: "); Serial.print(temp2); Serial.println(" °C");
-  Serial.print("Sensor 3 Temp: "); Serial.print(temp3); Serial.println(" °C");
-  Serial.print("Sensor 4 Temp: "); Serial.print(temp4); Serial.println(" °C");
-  Serial.print("Sensor 5 Temp: "); Serial.print(temp5); Serial.println(" °C");
-  Serial.println("----------------------");
+  // Handle incoming HTTP requests continuously
+  WiFiClient client = server.available();  
+  if (client) {
+    Serial.println("New client connected");
 
-  int data[5] = {temp1, temp2, temp3, temp4, temp5 };
-  int success = writeSensorData(data);
-  //int success = ThingSpeak.writeField(2810004, 5, data[2], "YWD5EAS53P91TXJI");
+    String currentLine = "";
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        Serial.write(c);
 
-  delay(20000); // Read every second
+        if (c == '\n') {
+          if (currentLine.length() == 0) {
+            // Send HTTP response headers
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-Type: text/html");
+            client.println("Connection: close");
+            client.println();
+            client.println(F("<meta charset=\"UTF-8\">"));
+            client.print(F("<p style=\"font-size:3vw;\">Sensor 1: ")); client.print(temp1);
+            client.print(F("<p style=\"font-size:3vw;\">Sensor 2: ")); client.print(temp2);
+            client.print(F("<p style=\"font-size:3vw;\">Sensor 3: ")); client.print(temp3);
+            client.print(F("<p style=\"font-size:3vw;\">Sensor 4: ")); client.print(temp4);
+            client.print(F("<p style=\"font-size:3vw;\">Sensor 5: ")); client.print(temp5);
+
+          client.println();
+            break;
+          } else {
+            currentLine = "";
+          }
+        } else if (c != '\r') {
+          currentLine += c;
+        }
+      }
+    }
+    client.stop();
+    Serial.println("Client disconnected");
+  }
 }
+
 
 int writeSensorData(int data[5]) {
   for (int i = 0; i < 5; i++) {
