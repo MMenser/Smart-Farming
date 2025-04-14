@@ -65,16 +65,6 @@ void loop() {
     //temp3 = temp2; // Set sensor 3 to sensor 2 because of testing
     temp4 = sensor4.temperature(RNOMINAL, RREF) * 1.8 + 32;    
 
-    Serial.println();
-    Serial.println();
-    Serial.println("Updated sensor readings:");
-    Serial.print("Ambient Temperature: "); Serial.println(ambientTemperature);
-    Serial.print("Sensor 1: "); Serial.println(temp1);
-    Serial.print("Sensor 2: "); Serial.println(temp2);
-    Serial.print("Sensor 3: "); Serial.println(temp3);
-    Serial.print("Sensor 4: "); Serial.println(temp4);
-    Serial.println("----------------------");
-
     average = (temp1 + temp2 + temp3 + temp4)/4;
     target = ambientTemperature + 10.0; // Target is 5 degrees above ambient
     delta = target - average;
@@ -85,23 +75,9 @@ void loop() {
       if (currentMillis - lastUpdate >= 60000) { // Only run maintainTemperature() every minute
         lastUpdate = currentMillis;
         int result = maintainTemperature(); 
-        if (result == 1) {
-          Serial.println("Box within 0.5 degree of target.");
-        }
-        else if (result == 0) {
-          Serial.println("Temperature still changing.");
-        }
-        else {
-          Serial.println("Voltaged changed. Monitoring temperature changes.");
-        }
       }
       recentTemperatures.erase(recentTemperatures.begin()); // Remove first element
     }
-  Serial.print("Current Voltage: "); Serial.println(currentVoltage);
-  Serial.print("Sensor Deltas: "); Serial.println(maxSensor-minSensor);
-  Serial.print("Target Temperature: "); Serial.println(target);
-  Serial.print("Average Temperature: "); Serial.println(average);
-  Serial.print("Delta: "); Serial.println(delta);
 
   std::vector<float> loraData;
   loraData.push_back(average);
@@ -112,11 +88,20 @@ void loop() {
   loraData.push_back(temp2);
   loraData.push_back(temp3);
   loraData.push_back(temp4);
-  sendLoraData(loraData);
   
+  sendSerialCSV(loraData);
   delay(10000); // Run every 15s
 }
 
+void sendSerialCSV(std::vector<float> dataToSend) {
+  for (int i = 0; i < dataToSend.size(); i++) {
+    Serial.print(dataToSend[i], 2); // 2 decimal places
+    if (i < dataToSend.size() - 1) {
+      Serial.print(","); // CSV comma
+    }
+  }
+  Serial.println(); // Newline ends CSV row
+}
 
 void sendLoraData(std::vector<float> dataToSend) {
   string combinedMessage = "1|";
@@ -143,17 +128,11 @@ int maintainTemperature() {
   float maxElement = max(recentTemperatures[0], max(recentTemperatures[1], max(recentTemperatures[2], max(recentTemperatures[3], recentTemperatures[4]))));
   float range = maxElement - minElement;
   range = sqrt(range * range); //Abs value of range
-  Serial.print("Recent Max Average: "); Serial.println(maxElement);
-  Serial.print("Recent Min Average: "); Serial.println(minElement);
-  Serial.print("Range between 5 most recent temp average: "); Serial.println(range);
 
   if (range > 0.40 ) return 0; // If above the range, temperature is still moving
 
   float currentAverage = recentTemperatures.back(); // Get most recent average
   float averageMinusTarget = currentAverage - target;
-  Serial.print("Target: "); Serial.println(target);
-  Serial.print("Current Average: "); Serial.println(currentAverage);
-  Serial.print("Average - Target: "); Serial.println(averageMinusTarget);
 
   if (averageMinusTarget < 0.5 && averageMinusTarget > -0.5) { // Within 1 degree from target
     return 1;
@@ -176,7 +155,6 @@ int maintainTemperature() {
 }
 void resetVoltageToZero() {
   float turnsNeeded = currentVoltage / 10;
-  Serial.print("Turns needed to reset to 0: "); Serial.println(turnsNeeded);
   for (int i = 0; i < turnsNeeded; i++) {
     changeVoltage(false, 0);
     delay(5000);
@@ -186,7 +164,6 @@ void resetVoltageToZero() {
 // y=0.188321x-0.0266254 -- x is steps per revolution, y is voltage change
 
 void changeVoltage(bool increase, float changeTarget) {
-  Serial.println("changeVoltage entered");
   float absChangeTarget = sqrt(changeTarget * changeTarget);
   if (absChangeTarget > 3.0) { // Need to change temperature by larger than 3 degrees
     stepsPerRevolution = 55; // About +-10 V
@@ -200,22 +177,17 @@ void changeVoltage(bool increase, float changeTarget) {
   else { // // Need to change temperature by less than 2 degrees
     stepsPerRevolution = 15;
   }
-  Serial.print("Steps Per Revolution: "); Serial.println(stepsPerRevolution);
   if (increase) {
     if (currentVoltage >= 115) {
-      Serial.println("Current voltage too high. Cannot increase more. Returning");
       return;
     }
-    Serial.println("Increasing voltage.");
     digitalWrite(dirPin, LOW);
     currentVoltage += (stepsPerRevolution*0.188321) - 0.0266254;
   }
   else {
     if (currentVoltage <= 10) {
-      Serial.println("Current voltage too low. Cannot decrease more. Returning");
       return;
     }
-    Serial.println("Decreasing voltage.");
     digitalWrite(dirPin, HIGH);
     currentVoltage -= (stepsPerRevolution*0.188321) - 0.0266254;
   }

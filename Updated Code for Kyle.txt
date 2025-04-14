@@ -10,7 +10,6 @@ void changeVoltage(bool increase, float changeTarget);
 void resetVoltageToZero();
 int maintainTemperature();
 void sendLoraData(std::vector<float> dataToSend);
-void sendSerialCSV(std::vector<float> dataToSend);
 
 #define dirPin 6
 #define stepPin 7
@@ -62,7 +61,7 @@ void loop() {
     temp1 = sensor1.temperature(RNOMINAL, RREF) * 1.8 + 32;
     temp2 = sensor2.temperature(RNOMINAL, RREF) * 1.8 + 32;
     temp3 = sensor3.temperature(RNOMINAL, RREF) * 1.8 + 32;
-    //temp3 = temp2; // Set sensor 3 to sensor 2 because of testing
+    temp3 = temp2; // Set sensor 3 to sensor 2 because of testing
     temp4 = sensor4.temperature(RNOMINAL, RREF) * 1.8 + 32;    
 
     Serial.println();
@@ -108,18 +107,13 @@ void loop() {
   loraData.push_back(ambientTemperature);
   loraData.push_back(target);
   loraData.push_back(currentVoltage);
-  loraData.push_back(temp1);
-  loraData.push_back(temp2);
-  loraData.push_back(temp3);
-  loraData.push_back(temp4);
   sendLoraData(loraData);
-  
+
   delay(10000); // Run every 15s
 }
 
-
 void sendLoraData(std::vector<float> dataToSend) {
-  string combinedMessage = "1|";
+  string combinedMessage = "";
   for (int i = 0; i < dataToSend.size(); i++) {
     string stringVersion = to_string(dataToSend[i]);
     size_t decimalPos = stringVersion.find('.');
