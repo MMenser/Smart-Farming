@@ -16,7 +16,7 @@ void sendSerialCSV(std::vector<float> dataToSend);
 #define stepPin 7
 #define RREF      430.0
 #define RNOMINAL  100.0
-#define startingVOLTAGE 68.0
+#define startingVOLTAGE 102.0
 
 // Use software SPI: CS, DI, DO, CLK
 Adafruit_MAX31865 sensor3 = Adafruit_MAX31865(9, 11, 12, 13); // CS pin 10 -- CS pins are what allows Arduino board to identify seperate devices
@@ -44,6 +44,7 @@ void setup() {
   pinMode(dirPin, OUTPUT);
   digitalWrite(dirPin, LOW);
   lora.setTimeout(500);
+
 }
 
 unsigned long lastUpdate = 0;  // Stores last sensor update time
