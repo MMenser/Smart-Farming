@@ -12,6 +12,7 @@ void resetVoltageToZero();
 int maintainTemperature();
 void recieveLoraMessage();
 void updateLCD();
+void sendSDInfo();
 void sendLoraData();
 void sendSerialCSV(std::vector<float> dataToSend);
 void printTemps();
@@ -26,11 +27,11 @@ void printTemps();
 
 // Use software SPI: CS, DI, DO, CLK
 Adafruit_MAX31865 ambientSensor = Adafruit_MAX31865(10, 11, 12, 13); // CS pin 10 -- CS pins are what allows Arduino board to identify seperate devices
-Adafruit_MAX31865 sensor1 = Adafruit_MAX31865(9, 11, 12, 13); 
-Adafruit_MAX31865 sensor2 = Adafruit_MAX31865(8, 11, 12, 13); 
-Adafruit_MAX31865 sensor3 = Adafruit_MAX31865(7, 11, 12, 13); 
-Adafruit_MAX31865 sensor4 = Adafruit_MAX31865(6, 11, 12, 13); 
-SoftwareSerial lora(0,1);
+Adafruit_MAX31865 sensor1 = Adafruit_MAX31865(9, 11, 12, 13);
+Adafruit_MAX31865 sensor2 = Adafruit_MAX31865(8, 11, 12, 13);
+Adafruit_MAX31865 sensor3 = Adafruit_MAX31865(7, 11, 12, 13);
+Adafruit_MAX31865 sensor4 = Adafruit_MAX31865(6, 11, 12, 13);
+SoftwareSerial lora(0, 1);
 LiquidCrystal_I2C lcd(0x27, 16, 2); // set the LCD address to 0x3F for a 16 chars and 2 line display
 
 int stepsPerRevolution = 0;
@@ -59,19 +60,23 @@ void setup()
   changeVoltage(true, 3.5);
 }
 
-unsigned long lastUpdate = 0;               // Stores last sensor update time
+unsigned long lastUpdate = 0; // Stores last sensor update time
 unsigned long lastMaintainTemperature = 0;
 
 unsigned long lastChangeVoltage = 0;
 const unsigned long updateInterval = 15000; // 15 seconds
 
-unsigned long lastLoraMessage = 0;           // Stores last time Lora sent a message
+unsigned long lastLoraMessage = 0;              // Stores last time Lora sent a message
 const unsigned long loraUpdateInterval = 60000; // Send every 15 minutes
+
+unsigned long lastSDUpdate = 0;               // Stores last time Lora sent a message
+const unsigned long sdWriteInterval = 600000; // Send every 10 minutes
 
 float ambientTemperature, temp1, temp2, temp3, temp4, average, maxSensor, minSensor, averageAmbient; // Store sensor values
 float delta = 15.0;
 
-void updateLCD() {
+void updateLCD()
+{
   lcd.backlight();
   lcd.setCursor(1, 0); // Set cursor to character 2 on line 0
   lcd.print("Average: ");
@@ -131,8 +136,10 @@ void loop()
 
     recentTemperatures.push_back(average);
     recentAmbients.push_back(ambientTemperature);
-    if (recentTemperatures.size() == 5 && recentAmbients.size() == 5) { // Vector has 5 elements, pop the least recent one 
-      if (currentMillis - lastMaintainTemperature >= 60000 && currentMillis - lastChangeVoltage >= 120000) { 
+    if (recentTemperatures.size() == 5 && recentAmbients.size() == 5)
+    { // Vector has 5 elements, pop the least recent one
+      if (currentMillis - lastMaintainTemperature >= 60000 && currentMillis - lastChangeVoltage >= 120000)
+      {
         // Only run maintainTemperature() every minute, unless voltage was changed less than 2 minutes ago then wait for temp changes.
         lastMaintainTemperature = currentMillis;
         int result = maintainTemperature();
@@ -144,22 +151,32 @@ void loop()
     printTemps();
   }
 
-  if (currentMillis - lastLoraMessage >= loraUpdateInterval) { // Every 15 minutes
+  if (currentMillis - lastLoraMessage >= loraUpdateInterval)
+  { // Every 15 minutes
     lastLoraMessage = currentMillis;
     sendLoraData();
     updateLCD();
   }
 
+  if (currentMillis - lastSDUpdate >= sdWriteInterval)
+  {
+    lastSDUpdate = currentMillis;
+    sendSDInfo();
+  }
+
   float buttonState = analogRead(buttonPin);
   buttonInputs.push_back(buttonState);
-  if (buttonInputs.size() == 5) {
-    float buttonAverage = (buttonInputs[0] + buttonInputs[1] + buttonInputs[2] + buttonInputs[3] + buttonInputs[4])/5;
-    if (buttonAverage > 10 && buttonAverage < 14 ) { // Increase button pressed
+  if (buttonInputs.size() == 5)
+  {
+    float buttonAverage = (buttonInputs[0] + buttonInputs[1] + buttonInputs[2] + buttonInputs[3] + buttonInputs[4]) / 5;
+    if (buttonAverage > 10 && buttonAverage < 14)
+    { // Increase button pressed
       Serial.println("Button increased");
       delta++;
       updateLCD();
     }
-    else if (buttonAverage > 18 && buttonAverage < 23) { // Decrease button presed
+    else if (buttonAverage > 18 && buttonAverage < 23)
+    { // Decrease button presed
       Serial.println("Button decreased");
       delta--;
       updateLCD();
@@ -167,17 +184,19 @@ void loop()
     buttonInputs.erase(buttonInputs.begin());
   }
 
-  
-  if (lora.available()) {
+  if (lora.available())
+  {
     recieveLoraMessage();
   }
   delay(100);
 }
 
-void recieveLoraMessage() {
+void recieveLoraMessage()
+{
   String message = "";
   message = lora.readString();
-  if (message.length() < 6) {
+  if (message.length() < 6)
+  {
     return;
   }
 
@@ -187,25 +206,59 @@ void recieveLoraMessage() {
   message = message.substring(0, commaIndex);
   char changeParamter = message[0]; // D for Delta, V for Voltage
   String value = message.substring(1);
-  Serial.print("Message: "); Serial.println(message);
-  Serial.print("Change Parameter: "); Serial.println(changeParamter);
-  if (changeParamter == 'D') {
+  Serial.print("Message: ");
+  Serial.println(message);
+  Serial.print("Change Parameter: ");
+  Serial.println(changeParamter);
+  if (changeParamter == 'D')
+  {
     delta = atof(value.c_str());
     Serial.println("Delta updated.");
   }
-  else if (changeParamter == 'V') {
+  else if (changeParamter == 'V')
+  {
     currentVoltage = atoi(value.c_str());
     Serial.println("Voltage updated.");
   }
-  else {
+  else
+  {
     Serial.println("Unknown change parameter/value.");
   }
 
   return;
 }
 
-
 void sendLoraData()
+{
+  std::vector<float> dataToSend = {average, averageAmbient, delta, currentVoltage, temp1, temp2, temp3, temp4};
+  string combinedMessage = "2|"; // NEED TO CHANGE FOR EACH BOX
+  for (int i = 0; i < dataToSend.size(); i++)
+  {
+    if (i == 2)
+    {
+      combinedMessage += to_string(int(delta)) + "|";
+    }
+    else
+    {
+      string stringVersion = to_string(dataToSend[i]);
+      size_t decimalPos = stringVersion.find('.');
+      if (decimalPos != std::string::npos && decimalPos + 3 < stringVersion.length())
+      {                                                          // Truncate if there is a decimal
+        stringVersion = stringVersion.substr(0, decimalPos + 3); // Truncate to 2 decimal
+      }
+
+      combinedMessage += stringVersion + "|";
+    }
+  }
+
+  String loraCommand = "AT+SEND=9," + String(combinedMessage.length()) + "," + combinedMessage.c_str();
+  Serial.print("Sending: ");
+  Serial.println(loraCommand);
+  lora.println(loraCommand);
+  delay(100);
+}
+
+void sendSDInfo()
 {
   std::vector<float> dataToSend = {average, averageAmbient, delta, currentVoltage, temp1, temp2, temp3, temp4};
   string combinedMessage = "2|"; // NEED TO CHANGE FOR EACH BOX
@@ -226,7 +279,7 @@ void sendLoraData()
     }
   }
 
-  String loraCommand = "AT+SEND=9," + String(combinedMessage.length()) + "," + combinedMessage.c_str();
+  String loraCommand = "AT+SEND=100," + String(combinedMessage.length()) + "," + combinedMessage.c_str();
   Serial.print("Sending: "); Serial.println(loraCommand);
   lora.println(loraCommand);
   delay(100);
@@ -291,17 +344,17 @@ void changeVoltage(bool increase, float changeTarget)
 
   float absChangeTarget = sqrt(changeTarget * changeTarget);
   if (absChangeTarget > 3.0)
-  {                          // Need to change temperature by larger than 3 degrees
-    stepsPerRevolution = 60; 
+  { // Need to change temperature by larger than 3 degrees
+    stepsPerRevolution = 60;
     averageVoltageChange = 10.0;
   }
   else if (absChangeTarget > 2.0)
-  {                          // Need to change temperature by larger than 2 degrees
-    stepsPerRevolution = 35; 
+  { // Need to change temperature by larger than 2 degrees
+    stepsPerRevolution = 35;
     averageVoltageChange = 6.0;
   }
   else if (absChangeTarget > 1)
-  {                          // Need to change temperature by larger than 1 degree
+  { // Need to change temperature by larger than 1 degree
     stepsPerRevolution = 25;
     averageVoltageChange = 4.5;
   }
@@ -321,11 +374,13 @@ void changeVoltage(bool increase, float changeTarget)
     }
     Serial.println("Increasing voltage.");
     digitalWrite(dirPin, LOW);
-    if (currentVoltage > 96) {
+    if (currentVoltage > 96)
+    {
       Serial.println("Voltage above 76.");
       currentVoltage += averageVoltageChange * percentVoltageReduction;
     }
-    else {
+    else
+    {
       currentVoltage += averageVoltageChange;
     }
   }
@@ -338,14 +393,15 @@ void changeVoltage(bool increase, float changeTarget)
     }
     Serial.println("Decreasing voltage.");
     digitalWrite(dirPin, HIGH);
-    if (currentVoltage > 96) {
+    if (currentVoltage > 96)
+    {
       Serial.println("Voltage above 95.");
       currentVoltage -= averageVoltageChange * percentVoltageReduction;
     }
-    else {
+    else
+    {
       currentVoltage -= averageVoltageChange;
     }
-
   }
   for (int i = 0; i < stepsPerRevolution; i++)
   {

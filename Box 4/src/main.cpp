@@ -11,6 +11,7 @@ void changeVoltage(bool increase, float changeTarget);
 void resetVoltageToZero();
 int maintainTemperature();
 void recieveLoraMessage();
+void sendSDInfo();
 void updateLCD();
 void sendLoraData();
 void sendSerialCSV(std::vector<float> dataToSend);
@@ -67,6 +68,10 @@ const unsigned long updateInterval = 15000; // 15 seconds
 
 unsigned long lastLoraMessage = 0;           // Stores last time Lora sent a message
 const unsigned long loraUpdateInterval = 60000; // Send every 15 minutes
+
+unsigned long lastSDUpdate = 0;               // Stores last time Lora sent a message
+const unsigned long sdWriteInterval = 600000; // Send every 10 minutes
+
 
 float ambientTemperature, temp1, temp2, temp3, temp4, average, maxSensor, minSensor, averageAmbient; // Store sensor values
 float delta = 10.0;
@@ -150,6 +155,12 @@ void loop()
     updateLCD();
   }
 
+    if (currentMillis - lastSDUpdate >= sdWriteInterval)
+  {
+    lastSDUpdate = currentMillis;
+    sendSDInfo();
+  }
+
   float buttonState = analogRead(buttonPin);
   buttonInputs.push_back(buttonState);
   if (buttonInputs.size() == 5) {
@@ -227,6 +238,33 @@ void sendLoraData()
   }
 
   String loraCommand = "AT+SEND=9," + String(combinedMessage.length()) + "," + combinedMessage.c_str();
+  Serial.print("Sending: "); Serial.println(loraCommand);
+  lora.println(loraCommand);
+  delay(100);
+}
+
+void sendSDInfo()
+{
+  std::vector<float> dataToSend = {average, averageAmbient, delta, currentVoltage, temp1, temp2, temp3, temp4};
+  string combinedMessage = "4|"; // NEED TO CHANGE FOR EACH BOX
+  for (int i = 0; i < dataToSend.size(); i++)
+  {
+    if (i == 2) {
+      combinedMessage += to_string(int(delta)) + "|";
+    }
+    else {
+      string stringVersion = to_string(dataToSend[i]);
+      size_t decimalPos = stringVersion.find('.');
+      if (decimalPos != std::string::npos && decimalPos + 3 < stringVersion.length())
+      {                                                          // Truncate if there is a decimal
+        stringVersion = stringVersion.substr(0, decimalPos + 3); // Truncate to 2 decimal
+      }
+  
+      combinedMessage += stringVersion + "|";
+    }
+  }
+
+  String loraCommand = "AT+SEND=100," + String(combinedMessage.length()) + "," + combinedMessage.c_str();
   Serial.print("Sending: "); Serial.println(loraCommand);
   lora.println(loraCommand);
   delay(100);
