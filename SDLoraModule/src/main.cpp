@@ -8,10 +8,6 @@
 void recieveMessage(String input);
 
 SdExFat sd;
-ExFile box1file;
-ExFile box2file;
-ExFile box3file;
-ExFile box4file;
 SoftwareSerial lora(0, 1);
 
 void setup()
@@ -59,56 +55,35 @@ void recieveMessage()
   String dataPart = message.substring(firstPipe + 1);
   int lastComma = dataPart.lastIndexOf(',');
   dataPart = dataPart.substring(0, lastComma); // Remove RSSI/SNR
+  dataPart.replace('|', ','); // CSV format
 
-  // Replace pipes with commas for CSV format
-  dataPart.replace('|', ',');
-  // // Log to the correct file
+  // Add timestamp (ms since boot)
+  String logLine = String(millis()) + "," + dataPart;
+
+  // Log to the correct file
+  ExFile file;
+  String filename;
+
   switch (sender)
   {
-  case 9:
-    if (!box1file.open("Box1.csv", FILE_WRITE))
-    {
-      Serial.println("Failed to open file!");
+    case 9:  filename = "Box1.csv"; break;
+    case 18: filename = "Box2.csv"; break;
+    case 27: filename = "Box3.csv"; break;
+    case 36: filename = "Box4.csv"; break;
+    default:
+      Serial.println("Unknown box ID: " + String(sender));
       return;
-    }
-    box1file.println(dataPart);
-    box1file.flush();
-    box1file.close();
-    break;
-  case 18:
-    if (!box2file.open("Box2.csv", FILE_WRITE))
-    {
-      Serial.println("Failed to open file!");
-      return;
-    }
-    box2file.println(dataPart);
-    box2file.flush();
-    box2file.close();
-    break;
-  case 27:
-    if (!box3file.open("Box3.csv", FILE_WRITE))
-    {
-      Serial.println("Failed to open file!");
-      return;
-    }
-    box3file.println(dataPart);
-    box3file.flush();
-    box3file.close();
-    break;
-  case 36:
-    if (!box4file.open("Box4.csv", FILE_WRITE))
-    {
-      Serial.println("Failed to open file!");
-      return;
-    }
-    box4file.println(dataPart);
-    box4file.flush();
-    box4file.close();
-    break;
-  default:
-    Serial.println("Unknown box ID: " + String(sender));
-    break;
   }
 
-  Serial.println("Logged data from Box " + String(sender) + ": " + dataPart);
+  if (!file.open(filename.c_str(), FILE_WRITE))
+  {
+    Serial.println("Failed to open file!");
+    return;
+  }
+
+  file.println(logLine);
+  file.flush();
+  file.close();
+
+  Serial.println("Logged data from Box " + String(sender) + ": " + logLine);
 }
